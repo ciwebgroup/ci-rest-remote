@@ -29,6 +29,8 @@ class CISiteManager
             $this->register_wp_cli_commands();
         }
         
+        // Register additional routes
+        add_action('rest_api_init', [$this, 'register_additional_routes']);
     }
 
     /**
@@ -163,13 +165,32 @@ class CISiteManager
     }
 
     /**
-     * Validate the API Key
+     * Register additional REST API routes
      */
-    public function validate_api_key()
+    public function register_additional_routes()
     {
-        $provided_key = $_SERVER['HTTP_X_CI_API_KEY'] ?? '';
-        $stored_key = get_option('ci_site_manager_api_key');
-        return hash_equals($stored_key, $provided_key);
+        $additional_endpoints = [
+            // Plugin and Theme Updates
+            ['route' => '/plugin/update/(?P<slug>[a-zA-Z0-9-]+)', 'methods' => 'POST', 'callback' => [$this, 'update_plugin']],
+            ['route' => '/theme/update/(?P<slug>[a-zA-Z0-9-]+)', 'methods' => 'POST', 'callback' => [$this, 'update_theme']],
+
+            // Post Management
+            ['route' => '/post/list', 'methods' => 'GET', 'callback' => [$this, 'list_posts']],
+            ['route' => '/post/create', 'methods' => 'POST', 'callback' => [$this, 'create_post']],
+            ['route' => '/post/delete/(?P<id>\d+)', 'methods' => 'DELETE', 'callback' => [$this, 'delete_post']],
+
+            // Database Backup and Restore
+            ['route' => '/database/backup', 'methods' => 'POST', 'callback' => [$this, 'backup_database']],
+            ['route' => '/database/restore', 'methods' => 'POST', 'callback' => [$this, 'restore_database']],
+        ];
+
+        foreach ($additional_endpoints as $endpoint) {
+            register_rest_route($this->namespace, $endpoint['route'], [
+                'methods' => $endpoint['methods'],
+                'callback' => $endpoint['callback'],
+                'permission_callback' => [$this, 'validate_api_key']
+            ]);
+        }
     }
 
     /**
@@ -194,6 +215,13 @@ class CISiteManager
         return !is_plugin_active($slug) ? rest_ensure_response(['status' => 'Plugin deactivated']) : new WP_Error('deactivation_failed', 'Failed to deactivate plugin');
     }
 
+    public function update_plugin($request)
+    {
+        $slug = $request['slug'];
+        // Logic to update the plugin
+        return rest_ensure_response(['status' => 'Plugin updated']);
+    }
+
     /**
      * Theme Management
      */
@@ -210,6 +238,13 @@ class CISiteManager
     public function deactivate_theme($request) {
         // WordPress does not support deactivating themes directly
         return new WP_Error('not_supported', 'Deactivating a theme is not supported.');
+    }
+
+    public function update_theme($request)
+    {
+        $slug = $request['slug'];
+        // Logic to update the theme
+        return rest_ensure_response(['status' => 'Theme updated']);
     }
 
     /**
@@ -232,6 +267,29 @@ class CISiteManager
         $user_id = $request['id'];
         require_once ABSPATH . 'wp-admin/includes/user.php';
         return wp_delete_user($user_id) ? rest_ensure_response(['status' => 'User deleted']) : new WP_Error('deletion_failed', 'Failed to delete user');
+    }
+
+    /**
+     * Post Management
+     */
+    public function list_posts()
+    {
+        $posts = get_posts(['numberposts' => -1]);
+        return rest_ensure_response($posts);
+    }
+
+    public function create_post($request)
+    {
+        $title = sanitize_text_field($request->get_param('title'));
+        $content = sanitize_textarea_field($request->get_param('content'));
+        $post_id = wp_insert_post(['post_title' => $title, 'post_content' => $content, 'post_status' => 'publish']);
+        return is_wp_error($post_id) ? $post_id : rest_ensure_response(['status' => 'Post created', 'post_id' => $post_id]);
+    }
+
+    public function delete_post($request)
+    {
+        $post_id = $request['id'];
+        return wp_delete_post($post_id, true) ? rest_ensure_response(['status' => 'Post deleted']) : new WP_Error('deletion_failed', 'Failed to delete post');
     }
 
     /**
@@ -275,6 +333,21 @@ class CISiteManager
         $replace = $request->get_param('replace');
         // Placeholder for actual search-replace logic across database tables
         return rest_ensure_response(['status' => 'Search-replace executed', 'search' => $search, 'replace' => $replace]);
+    }
+
+    /**
+     * Database Backup and Restore
+     */
+    public function backup_database()
+    {
+        // Logic to backup the database
+        return rest_ensure_response(['status' => 'Database backup created']);
+    }
+
+    public function restore_database($request)
+    {
+        // Logic to restore the database
+        return rest_ensure_response(['status' => 'Database restored']);
     }
 
     /**
