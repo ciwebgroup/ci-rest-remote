@@ -1,5 +1,3 @@
----
-
 # CI Rest Remote
 Remote WordPress Control with API-Driven RESTful command syntax.
 
